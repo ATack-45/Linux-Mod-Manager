@@ -11,50 +11,102 @@
 
     <nav id="sidebar">
       <div id="sidebar-header">
-        <div id="app-title">Linux Mod Manager</div>
-        <div id="app-subtitle">Game mod management</div>
+        <img id="app-logo" src="logo.png" alt="logo" />
+        <div>
+          <div id="app-title">Mod Manager</div>
+          <div id="app-subtitle">for Linux</div>
+        </div>
       </div>
 
-      <div id="nav-section-label">NAVIGATE</div>
+      <div id="nav-section-label">Navigation</div>
 
       <ul id="nav-list">
-        <li><button class="nav-btn active" data-page="home">Home</button></li>
-        <li><button class="nav-btn" data-page="games">Games</button></li>
-        <li><button class="nav-btn" data-page="mods">Mods</button></li>
-        <li><button class="nav-btn" data-page="downloads">Downloads</button></li>
-        <li><button class="nav-btn" data-page="profiles">Profiles</button></li>
+        <li><button class="nav-btn active" data-page="games">Games</button></li>
+        <li><button class="nav-btn" data-page="recent">Recent &amp; Pinned</button></li>
       </ul>
 
       <button class="nav-btn" id="settings-btn" data-page="settings">Settings</button>
     </nav>
 
     <main id="content">
-      <div class="page active" id="page-home">
-        <h1 class="page-title">Home</h1>
-        <p class="page-desc">Your games and recent activity will appear here.</p>
-      </div>
-      <div class="page" id="page-games">
-        <h1 class="page-title">Games</h1>
-        <p class="page-desc">Add and manage your game library here.</p>
-      </div>
-      <div class="page" id="page-mods">
-        <h1 class="page-title">Mods</h1>
-        <p class="page-desc">Browse, install, and manage mods for your games.</p>
-      </div>
-      <div class="page" id="page-downloads">
-        <h1 class="page-title">Downloads</h1>
-        <p class="page-desc">Active and completed mod downloads will appear here.</p>
-      </div>
-      <div class="page" id="page-profiles">
-        <h1 class="page-title">Profiles</h1>
-        <p class="page-desc">Create and switch between mod profiles for each game.</p>
-      </div>
-      <div class="page" id="page-settings">
-        <h1 class="page-title">Settings</h1>
-        <p class="page-desc">Configure application preferences and integrations.</p>
-      </div>
-    </main>
 
+      <div class="page active" id="page-games">
+        <div id="games-toolbar">
+          <span id="games-count"></span>
+          <div id="games-toolbar-right">
+            <div id="view-toggle">
+              <button class="view-btn active" id="btn-view-tile" title="Tile view">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                  <rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/>
+                  <rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/>
+                </svg>
+              </button>
+              <button class="view-btn" id="btn-view-list" title="List view">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                  <rect x="0" y="1" width="14" height="2" rx="1"/><rect x="0" y="6" width="14" height="2" rx="1"/>
+                  <rect x="0" y="11" width="14" height="2" rx="1"/>
+                </svg>
+              </button>
+            </div>
+            <button class="action-btn" id="btn-refresh-games">Refresh</button>
+          </div>
+        </div>
+        <div id="games-status" class="hidden"></div>
+        <div id="games-grid"></div>
+      </div>
+
+      <div class="page" id="page-recent">
+        <h1 class="page-title">Recent &amp; Pinned</h1>
+        <p class="page-desc">Recently played games and pinned favourites will appear here.</p>
+      </div>
+
+      <div class="page" id="page-settings">
+        <div class="settings-page">
+
+          <div class="settings-page-header">
+            <h1 class="settings-page-title">Settings</h1>
+          </div>
+
+          <div class="settings-body">
+            <section class="settings-section">
+              <div class="settings-section-header">
+                <div class="settings-section-meta">
+                  <h2 class="settings-section-title">Steam Libraries</h2>
+                  <p class="settings-desc">
+                    The app scans these folders to find your installed games.
+                    Steam libraries are detected automatically from your installation.
+                    Add paths here for any drives or custom locations not picked up automatically.
+                    Removing a path will exclude it from future scans.
+                  </p>
+                </div>
+                <button class="icon-btn" id="btn-show-add-library" title="Add library path">+</button>
+              </div>
+
+              <div id="add-library-row" class="hidden">
+                <input
+                  id="add-library-input"
+                  type="text"
+                  placeholder="/mnt/drive/SteamLibrary"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+                <button class="action-btn" id="btn-confirm-add">Add</button>
+                <button class="ghost-btn" id="btn-cancel-add">Cancel</button>
+              </div>
+
+              <ul class="library-list" id="library-list"></ul>
+            </section>
+          </div>
+
+          <div class="settings-footer">
+            <button class="action-btn save-btn" id="btn-save-settings" disabled>Save Changes</button>
+            <span id="save-status"></span>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
   </div>
   <script src="main.js"></script>
 </body>

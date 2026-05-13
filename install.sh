@@ -16,6 +16,13 @@ install_rust() {
     echo "[..] Installing Rust via rustup..."
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
     source "$HOME/.cargo/env"
+
+    # Add cargo to PATH permanently in the user's shell profile
+    for profile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+        if [ -f "$profile" ] && ! grep -q 'cargo/env' "$profile"; then
+            echo 'source "$HOME/.cargo/env"' >> "$profile"
+        fi
+    done
     echo "[ok] Rust installed"
 }
 
