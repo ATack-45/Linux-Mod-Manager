@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Linux Mod Manager</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <nav id="sidebar">
+      <div id="sidebar-header">
+        <div id="app-title">Linux Mod Manager</div>
+        <div id="app-subtitle">Game mod management</div>
+      </div>
+
+      <div id="nav-section-label">NAVIGATE</div>
+
+      <ul id="nav-list">
+        <li><button class="nav-btn active" data-page="home">Home</button></li>
+        <li><button class="nav-btn" data-page="games">Games</button></li>
+        <li><button class="nav-btn" data-page="mods">Mods</button></li>
+        <li><button class="nav-btn" data-page="downloads">Downloads</button></li>
+        <li><button class="nav-btn" data-page="profiles">Profiles</button></li>
+      </ul>
+
+      <button class="nav-btn" id="settings-btn" data-page="settings">Settings</button>
+    </nav>
+
+    <main id="content">
+      <div class="page active" id="page-home">
+        <h1 class="page-title">Home</h1>
+        <p class="page-desc">Your games and recent activity will appear here.</p>
+      </div>
+      <div class="page" id="page-games">
+        <h1 class="page-title">Games</h1>
+        <p class="page-desc">Add and manage your game library here.</p>
+      </div>
+      <div class="page" id="page-mods">
+        <h1 class="page-title">Mods</h1>
+        <p class="page-desc">Browse, install, and manage mods for your games.</p>
+      </div>
+      <div class="page" id="page-downloads">
+        <h1 class="page-title">Downloads</h1>
+        <p class="page-desc">Active and completed mod downloads will appear here.</p>
+      </div>
+      <div class="page" id="page-profiles">
+        <h1 class="page-title">Profiles</h1>
+        <p class="page-desc">Create and switch between mod profiles for each game.</p>
+      </div>
+      <div class="page" id="page-settings">
+        <h1 class="page-title">Settings</h1>
+        <p class="page-desc">Configure application preferences and integrations.</p>
+      </div>
+    </main>
+
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>

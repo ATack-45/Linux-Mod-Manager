@@ -1,0 +1,164 @@
+/* ── Variables ────────────────────────────────────────────────────── */
+:root {
+  --bg:              #1a1c1a;
+  --sidebar-bg:      #1b1e1c;
+  --sidebar-border:  #2a3d2e;
+  --content-bg:      #1f211f;
+  --accent:          #4caf50;
+  --accent-dim:      #3a5a3e;
+  --text:            #c8d8c8;
+  --text-muted:      #6a8a6a;
+  --text-dim:        #4a6b4e;
+  --nav-hover-bg:    #222823;
+  --nav-active-bg:   #243029;
+  --sidebar-width:   220px;
+  --font:            "Liberation Sans", "Segoe UI", sans-serif;
+}
+
+/* ── Reset ────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--sidebar-bg); }
+::-webkit-scrollbar-thumb { background: var(--accent-dim); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ── Root layout ──────────────────────────────────────────────────── */
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────── */
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  overflow: hidden;
+}
+
+#sidebar-header {
+  padding: 20px 16px 14px;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+#app-title {
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+#app-subtitle {
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-top: 3px;
+}
+
+#nav-section-label {
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  padding: 14px 16px 4px;
+}
+
+/* ── Nav list ─────────────────────────────────────────────────────── */
+#nav-list {
+  list-style: none;
+  flex: 1;
+}
+
+#nav-list li {
+  display: flex;
+}
+
+/* ── Nav buttons (shared by list items and settings) ─────────────── */
+.nav-btn {
+  display: block;
+  width: 100%;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-left: 3px solid transparent;
+  padding: 10px 16px 10px 13px;
+  text-align: left;
+  font-family: var(--font);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.nav-btn:hover {
+  background: var(--nav-hover-bg);
+  color: var(--text);
+  border-left-color: var(--accent-dim);
+}
+
+.nav-btn.active {
+  background: var(--nav-active-bg);
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: bold;
+}
+
+/* ── Settings button (pinned to bottom) ──────────────────────────── */
+#settings-btn {
+  margin-top: auto;
+  height: 46px;
+  border-top: 1px solid var(--sidebar-border);
+  color: var(--text-muted);
+}
+
+/* ── Content area ─────────────────────────────────────────────────── */
+#content {
+  flex: 1;
+  background: var(--content-bg);
+  overflow-y: auto;
+  position: relative;
+}
+
+/* ── Pages ────────────────────────────────────────────────────────── */
+.page {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  padding: 32px;
+}
+
+.page.active {
+  display: flex;
+}
+
+.page-title {
+  color: var(--accent);
+  font-size: 26px;
+  font-weight: bold;
+}
+
+.page-desc {
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+  max-width: 400px;
+}
