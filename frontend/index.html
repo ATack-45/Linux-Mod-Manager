@@ -18,12 +18,20 @@
         </div>
       </div>
 
-      <div id="nav-section-label">Navigation</div>
+      <div id="sidebar-nav-area">
 
-      <ul id="nav-list">
-        <li><button class="nav-btn active" data-page="games">Games</button></li>
-        <li><button class="nav-btn" data-page="recent">Recent &amp; Pinned</button></li>
-      </ul>
+        <div id="nav-section-label">Navigation</div>
+
+        <ul id="nav-list">
+          <li><button class="nav-btn active" data-page="games">Games</button></li>
+        </ul>
+
+        <div id="pinned-section" class="hidden">
+          <div id="pinned-section-label">Pinned</div>
+          <ul id="pinned-list"></ul>
+        </div>
+
+      </div>
 
       <button class="nav-btn" id="settings-btn" data-page="settings">Settings</button>
     </nav>
@@ -53,11 +61,6 @@
         </div>
         <div id="games-status" class="hidden"></div>
         <div id="games-grid"></div>
-      </div>
-
-      <div class="page" id="page-recent">
-        <h1 class="page-title">Recent &amp; Pinned</h1>
-        <p class="page-desc">Recently played games and pinned favourites will appear here.</p>
       </div>
 
       <div class="page" id="page-settings">
@@ -96,6 +99,29 @@
 
               <ul class="library-list" id="library-list"></ul>
             </section>
+            <section class="settings-section">
+              <div class="settings-section-header">
+                <div class="settings-section-meta">
+                  <h2 class="settings-section-title">NexusMods</h2>
+                  <p class="settings-desc">
+                    Your API key is used to look up mod info and download files.
+                    Get yours at nexusmods.com &rarr; account &rarr; API Keys.
+                    Premium members get direct downloads; free members can use the
+                    "Mod Manager Download" button on NexusMods to get an NXM link.
+                  </p>
+                </div>
+              </div>
+              <div class="nexus-api-row">
+                <input
+                  id="nexus-api-input"
+                  type="password"
+                  placeholder="Paste API key..."
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button class="ghost-btn" id="btn-nexus-api-show">Show</button>
+              </div>
+            </section>
           </div>
 
           <div class="settings-footer">
@@ -106,8 +132,29 @@
         </div>
       </div>
 
+      <div class="page" id="page-mods">
+        <div class="mods-page">
+
+          <div class="mods-page-header">
+            <button class="ghost-btn" id="btn-back-to-games">&#8592; Back</button>
+            <div class="mods-game-hero">
+              <div class="mods-game-cover" id="mods-game-cover"></div>
+              <div class="mods-game-meta">
+                <div class="mods-game-name" id="mods-game-name"></div>
+                <div class="mods-game-path" id="mods-game-path"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mods-restart-notice">Changes take effect after restarting the game.</div>
+
+          <div class="mods-body" id="mods-body"></div>
+
+        </div>
+      </div>
+
     </main>
   </div>
-  <script src="main.js"></script>
+  <script type="module" src="main.js"></script>
 </body>
 </html>

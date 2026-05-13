@@ -25,6 +25,13 @@
       }
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["nxm"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

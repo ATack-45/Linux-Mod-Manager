@@ -1,22 +1,41 @@
-const { invoke, convertFileSrc } = window.__TAURI__.core;
+import { loadModsPage } from "./modding/index.js";
+
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
+
+// Maps NexusMods game domain → Steam app_id
+const NEXUS_DOMAIN_TO_APP_ID = {
+  "cyberpunk2077": "1091500",
+};
 
 // ── State ──────────────────────────────────────────────────────────
 let autoPaths = [];
-let settings = { extra_paths: [], excluded_paths: [] };
+let settings = { extra_paths: [], excluded_paths: [], pinned_games: [], nexus_api_key: "" };
 let allPaths = [];
 let viewMode = "tile"; // "tile" | "list"
 
-// Pending edits (not yet saved)
+// Pending library edits (not yet saved)
 let pendingExcluded = new Set();
 let pendingExtra = [];
 let isDirty = false;
 
+// Games cache — populated after each scan, used by sidebar pins
+let gameMap = {}; // app_id -> { game, coverDataUrl }
+
+// Mods page state
+let currentModGame = null;
+
 // ── Navigation ─────────────────────────────────────────────────────
+function navigateRaw(pageId) {
+  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+  document.getElementById(`page-${pageId}`).classList.add("active");
+}
+
 function navigate(pageId) {
   document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
-  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
-  document.querySelector(`[data-page="${pageId}"]`).classList.add("active");
-  document.getElementById(`page-${pageId}`).classList.add("active");
+  const navBtn = document.querySelector(`[data-page="${pageId}"]`);
+  if (navBtn) navBtn.classList.add("active");
+  navigateRaw(pageId);
 }
 
 // ── Games ──────────────────────────────────────────────────────────
@@ -37,6 +56,8 @@ async function loadGames() {
       status.textContent = allPaths.length === 0
         ? "No Steam libraries found. Add a path in Settings."
         : "No installed games found in the configured libraries.";
+      gameMap = {};
+      renderPinnedSection();
       return;
     }
 
@@ -53,7 +74,14 @@ async function loadGames() {
       )
     );
 
+    // Rebuild game map for sidebar pin lookups
+    gameMap = {};
+    games.forEach((game, i) => {
+      gameMap[game.app_id] = { game, coverDataUrl: coverDataUrls[i] };
+    });
+
     games.forEach((game, i) => grid.appendChild(makeGameCard(game, coverDataUrls[i])));
+    renderPinnedSection();
   } catch (err) {
     status.textContent = `Error scanning games: ${err}`;
   }
@@ -62,6 +90,7 @@ async function loadGames() {
 function makeGameCard(game, coverDataUrl) {
   const card = document.createElement("div");
   card.className = "game-card";
+  card.addEventListener("click", () => openModsPage(game, coverDataUrl));
 
   const libShort = game.library_path.split("/").slice(-2).join("/");
 
@@ -99,9 +128,22 @@ function makeGameCard(game, coverDataUrl) {
     `<div class="game-library">${esc(libShort)}</div>` +
     `<div class="game-size">${formatSize(game.size_on_disk)}</div>`;
 
+  // Pin button — stops propagation so it doesn't open the mods page
+  const pinBtn = document.createElement("button");
+  pinBtn.className = "pin-btn";
+  pinBtn.title = "Pin to sidebar";
+  const isPinned = (settings.pinned_games || []).includes(game.app_id);
+  pinBtn.classList.toggle("pinned", isPinned);
+  pinBtn.textContent = isPinned ? "★" : "☆";
+  pinBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    togglePin(game.app_id, pinBtn);
+  });
+
   card.appendChild(coverEl);
   card.appendChild(iconEl);
   card.appendChild(infoEl);
+  card.appendChild(pinBtn);
   return card;
 }
 
@@ -122,6 +164,88 @@ function setViewMode(mode) {
   grid.classList.toggle("list-view", mode === "list");
   document.getElementById("btn-view-tile").classList.toggle("active", mode === "tile");
   document.getElementById("btn-view-list").classList.toggle("active", mode === "list");
+}
+
+// ── Pins ───────────────────────────────────────────────────────────
+function togglePin(appId, pinBtnEl) {
+  if (!settings.pinned_games) settings.pinned_games = [];
+  const idx = settings.pinned_games.indexOf(appId);
+  if (idx === -1) {
+    settings.pinned_games.push(appId);
+  } else {
+    settings.pinned_games.splice(idx, 1);
+  }
+
+  // Update the card's pin button appearance
+  const pinned = settings.pinned_games.includes(appId);
+  if (pinBtnEl) {
+    pinBtnEl.classList.toggle("pinned", pinned);
+    pinBtnEl.textContent = pinned ? "★" : "☆";
+  }
+
+  renderPinnedSection();
+  invoke("save_settings", { settings }).catch((err) =>
+    console.error("Failed to save pin state:", err)
+  );
+}
+
+function renderPinnedSection() {
+  const section = document.getElementById("pinned-section");
+  const list = document.getElementById("pinned-list");
+  const pins = settings.pinned_games || [];
+
+  // Only show games that are currently installed (in gameMap)
+  const activePins = pins.filter((id) => gameMap[id]);
+
+  section.classList.toggle("hidden", activePins.length === 0);
+  list.innerHTML = "";
+
+  for (const appId of activePins) {
+    const { game, coverDataUrl } = gameMap[appId];
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.className = "pinned-game-btn";
+    btn.title = game.name;
+    btn.textContent = game.name;
+    btn.addEventListener("click", () => openModsPage(game, coverDataUrl));
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+}
+
+// ── Mods page ──────────────────────────────────────────────────────
+async function openModsPage(game, coverDataUrl, opts = {}) {
+  currentModGame = game;
+
+  // Populate hero cover
+  const coverEl = document.getElementById("mods-game-cover");
+  coverEl.innerHTML = "";
+  coverEl.className = "mods-game-cover";
+  if (coverDataUrl) {
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = coverDataUrl;
+    coverEl.appendChild(img);
+  } else {
+    coverEl.className = "mods-game-cover-placeholder";
+    coverEl.textContent = (game.name || "?")[0].toUpperCase();
+  }
+
+  document.getElementById("mods-game-name").textContent = game.name;
+  document.getElementById("mods-game-path").textContent =
+    `${game.library_path}/steamapps/common/${game.install_dir}`;
+
+  const body = document.getElementById("mods-body");
+  body.innerHTML = '<div class="mods-loading">Scanning mods...</div>';
+
+  navigateRaw("mods");
+
+  await loadModsPage(game, coverDataUrl, body, opts);
+}
+
+function closeModsPage() {
+  currentModGame = null;
+  navigateRaw("games");
 }
 
 // ── Settings — rendering ───────────────────────────────────────────
@@ -233,19 +357,28 @@ async function init() {
   } catch (err) {
     console.error("Failed to load initial data:", err);
     autoPaths = [];
-    settings = { extra_paths: [], excluded_paths: [] };
+    settings = { extra_paths: [], excluded_paths: [], pinned_games: [] };
   }
 
   // Migrate old settings format if needed
   if (!settings.extra_paths) settings.extra_paths = settings.custom_library_paths || [];
   if (!settings.excluded_paths) settings.excluded_paths = [];
+  if (!settings.pinned_games) settings.pinned_games = [];
+  if (settings.nexus_api_key === undefined) settings.nexus_api_key = "";
+
+  const nexusInput = document.getElementById("nexus-api-input");
+  if (nexusInput) nexusInput.value = settings.nexus_api_key;
 
   pendingExcluded = new Set(settings.excluded_paths);
   pendingExtra = [...settings.extra_paths];
   allPaths = pendingPaths();
 
   renderLibraryList();
-  loadGames();
+  await loadGames();
+
+  // Pick up any NXM link that arrived before the webview was ready
+  const pendingNxm = await invoke("get_pending_nxm_url");
+  if (pendingNxm) handleNxmUrl(pendingNxm);
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -282,5 +415,36 @@ document.getElementById("add-library-input").addEventListener("keydown", (e) => 
 });
 
 document.getElementById("btn-save-settings").addEventListener("click", saveSettings);
+document.getElementById("btn-back-to-games").addEventListener("click", closeModsPage);
+
+document.getElementById("nexus-api-input").addEventListener("input", (e) => {
+  settings.nexus_api_key = e.target.value.trim();
+  markDirty();
+});
+
+document.getElementById("btn-nexus-api-show").addEventListener("click", (e) => {
+  const input = document.getElementById("nexus-api-input");
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  e.target.textContent = show ? "Hide" : "Show";
+});
+
+// ── NXM deep-link handler ──────────────────────────────────────────
+function handleNxmUrl(nxmUrl) {
+  const match = String(nxmUrl).match(/^nxm:\/\/([^/]+)/i);
+  if (!match) return;
+  const domain = match[1].toLowerCase();
+  const appId = NEXUS_DOMAIN_TO_APP_ID[domain];
+  if (!appId) return;
+  const entry = gameMap[appId];
+  if (!entry) return;
+  openModsPage(entry.game, entry.coverDataUrl, { nxmUrl });
+}
+
+// Live event: clear pending so the init-time check doesn't double-process
+listen("nxm-link", ({ payload }) => {
+  invoke("clear_pending_nxm_url").catch(() => {});
+  handleNxmUrl(payload);
+});
 
 init();
