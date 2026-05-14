@@ -2,6 +2,14 @@
 
 A native Linux application for managing game mods. Built with [Tauri v2](https://tauri.app) —  Rust backend, HTML/CSS/JS frontend rendered in the system WebKit webview (no bundled browser).
 
+## Features
+
+- **NexusMods Integration**: Browse, search, and download mods directly from NexusMods
+- **Mod Management**: Enable/disable, uninstall, and manage mod lifecycle
+- **Cyberpunk 2077 Support**: Game-specific mod handling and component management
+- **Deep Linking**: Support for NXM protocol and single-instance application handling
+- **Multi-Game Support**: Extensible architecture for supporting multiple games
+- **Steam Library Detection**: Automatic detection of Steam libraries
 
 ## Install / Run
 
@@ -42,6 +50,8 @@ frontend/              # UI — edit these for layout and style
   main.js
 src-tauri/             # Rust/Tauri backend
   src/main.rs          # App entry point (thin shell for now)
+  src/modding/         # Mod management and scanning logic
+  src/nexusmods.rs     # NexusMods API integration
   tauri.conf.json      # Window config, icon paths, bundle settings
   Cargo.toml           # Rust dependencies
   build.rs             # Required Tauri build script
