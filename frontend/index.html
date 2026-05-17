@@ -102,24 +102,39 @@
             <section class="settings-section">
               <div class="settings-section-header">
                 <div class="settings-section-meta">
-                  <h2 class="settings-section-title">NexusMods</h2>
+                  <h2 class="settings-section-title">Nexus Mods Account</h2>
                   <p class="settings-desc">
-                    Your API key is used to look up mod info and download files.
-                    Get yours at nexusmods.com &rarr; account &rarr; API Keys.
-                    Premium members get direct downloads; free members can use the
-                    "Mod Manager Download" button on NexusMods to get an NXM link.
+                    Connect your account to enable automated collection downloads.
+                    Free accounts must log in below; Premium members can download directly.
                   </p>
                 </div>
               </div>
-              <div class="nexus-api-row">
-                <input
-                  id="nexus-api-input"
-                  type="password"
-                  placeholder="Paste API key..."
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <button class="ghost-btn" id="btn-nexus-api-show">Show</button>
+
+              <div class="nexus-account-card">
+                <div class="nexus-account-avatar" id="nexus-account-avatar">?</div>
+                <div class="nexus-account-info">
+                  <div class="nexus-account-name" id="nexus-account-name">Not logged in</div>
+                  <div class="nexus-account-sub" id="nexus-account-sub">Login to enable collection downloads for free accounts</div>
+                </div>
+                <button class="ghost-btn" id="btn-nexus-login">Login</button>
+              </div>
+
+              <div class="nexus-api-block">
+                <div class="nexus-api-label">API Key</div>
+                <div class="nexus-api-row">
+                  <input
+                    id="nexus-api-input"
+                    type="password"
+                    placeholder="Paste your API key..."
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button class="ghost-btn" id="btn-nexus-api-show">Show</button>
+                </div>
+                <div class="nexus-api-hint">
+                  Get yours at nexusmods.com &rarr; account &rarr; API Keys.
+                  Required for mod lookups and direct downloads (Premium).
+                </div>
               </div>
             </section>
           </div>

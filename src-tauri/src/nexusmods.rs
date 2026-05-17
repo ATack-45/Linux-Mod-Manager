@@ -27,6 +27,26 @@ pub struct NexusModFile {
     pub category: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct NexusCollectionInfo {
+    pub name: String,
+    pub summary: String,
+    pub slug: String,
+    pub revision: u32,
+    pub mod_count: usize,
+    pub game_domain: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct NexusCollectionMod {
+    pub mod_id: u64,
+    pub file_id: u64,
+    pub name: String,
+    pub version: String,
+    pub game_domain: String,
+    pub optional: bool,
+}
+
 // Internal parsed reference from a URL or NXM link
 pub struct ParsedModRef {
     pub game_domain: String,
@@ -34,6 +54,13 @@ pub struct ParsedModRef {
     pub file_id: Option<u64>,
     pub nxm_key: Option<String>,
     pub nxm_expires: Option<u64>,
+    pub nxm_user_id: Option<u64>,
+}
+
+pub struct ParsedCollectionRef {
+    pub game_domain: String,
+    pub slug: String,
+    pub revision: u32,
 }
 
 // ── URL / NXM parsing ─────────────────────────────────────────────────
@@ -92,6 +119,7 @@ fn parse_web_url(input: &str) -> Result<ParsedModRef, String> {
         file_id: None,
         nxm_key: None,
         nxm_expires: None,
+        nxm_user_id: None,
     })
 }
 
@@ -108,17 +136,26 @@ fn parse_nxm(input: &str) -> Result<ParsedModRef, String> {
         return Err("NXM link is malformed (too short)".to_string());
     }
 
+    if parts.get(1).copied() == Some("collections") {
+        return Err(
+            "This is a collection NXM link — use nexus_collection_lookup instead".to_string(),
+        );
+    }
+
     let game_domain = parts[0].to_string();
     let mod_id: u64 = parts[2].parse().map_err(|_| "NXM mod ID is not a number")?;
     let file_id: u64 = parts[4].parse().map_err(|_| "NXM file ID is not a number")?;
 
     let mut nxm_key = None;
     let mut nxm_expires = None;
+    let mut nxm_user_id = None;
     for param in query_part.split('&') {
         if let Some(v) = param.strip_prefix("key=") {
             nxm_key = Some(v.to_string());
         } else if let Some(v) = param.strip_prefix("expires=") {
             nxm_expires = v.parse().ok();
+        } else if let Some(v) = param.strip_prefix("user_id=") {
+            nxm_user_id = v.parse().ok();
         }
     }
 
@@ -128,8 +165,27 @@ fn parse_nxm(input: &str) -> Result<ParsedModRef, String> {
         file_id: Some(file_id),
         nxm_key,
         nxm_expires,
+        nxm_user_id,
     })
 }
+
+pub fn parse_collection_ref(input: &str) -> Result<ParsedCollectionRef, String> {
+    // nxm://cyberpunk2077/collections/devnx1/revisions/40
+    let without_scheme = input.strip_prefix("nxm://").unwrap_or(input);
+    let path_part = without_scheme.split('?').next().unwrap_or(without_scheme);
+    let parts: Vec<&str> = path_part.trim_end_matches('/').split('/').collect();
+    // parts: [game, "collections", slug, "revisions", revision]
+    if parts.len() < 5 || parts.get(1).copied() != Some("collections") || parts.get(3).copied() != Some("revisions") {
+        return Err("Not a valid collection NXM link".to_string());
+    }
+    let game_domain = parts[0].to_string();
+    let slug = parts[2].to_string();
+    let revision: u32 = parts[4]
+        .parse()
+        .map_err(|_| "Collection revision number is not valid".to_string())?;
+    Ok(ParsedCollectionRef { game_domain, slug, revision })
+}
+
 
 // ── HTTP helpers ──────────────────────────────────────────────────────
 
@@ -292,27 +348,39 @@ pub async fn get_download_url(
         API_BASE, r.game_domain, r.mod_id, file_id
     );
 
-    // Append NXM key params if present (required for free-tier users)
+    // Append NXM key params if present (required for free-tier users).
+    // user_id is client-side metadata in the NXM link and is NOT sent to the API.
     if let (Some(key), Some(expires)) = (&r.nxm_key, r.nxm_expires) {
         url = format!("{url}?key={key}&expires={expires}");
     }
 
-    let links: Vec<DownloadLink> = api_client(api_key)?
+    let key_hint = if api_key.len() >= 6 { &api_key[..6] } else { api_key };
+    eprintln!("[download_url] GET {url}  (api_key starts: {key_hint}...)");
+
+    let resp = api_client(api_key)?
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?
-        .error_for_status()
-        .map_err(|e| {
-            if e.status().map(|s| s.as_u16()) == Some(403) {
-                "Download links require a NexusMods Premium account or an NXM link with a valid key. Use the 'Mod Manager Download' button on the NexusMods website to get an NXM link.".to_string()
-            } else {
-                format!("NexusMods API error: {e}")
-            }
-        })?
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse download links: {e}"))?;
+        .map_err(|e| format!("Request failed: {e}"))?;
+
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| format!("Failed to read response: {e}"))?;
+    eprintln!("[download_url] HTTP {status}  body: {body}");
+
+    if !status.is_success() {
+        return Err(match status.as_u16() {
+            403 => "Download links require a NexusMods Premium account or a valid NXM key.".to_string(),
+            400 => format!(
+                "NexusMods rejected the download key (HTTP 400): {body}\n\
+                Make sure you are logged into nexusmods.com in your browser \
+                as the same account whose API key is saved in Settings."
+            ),
+            _ => format!("NexusMods API error: HTTP {status}: {body}"),
+        });
+    }
+
+    let links: Vec<DownloadLink> = serde_json::from_str(&body)
+        .map_err(|e| format!("Failed to parse download links: {e}\nBody: {body}"))?;
 
     links
         .into_iter()
@@ -471,7 +539,273 @@ fn detect_install_strategy(entries: &[String]) -> Result<InstallStrategy, String
     ))
 }
 
+// ── Collection API ────────────────────────────────────────────────────
+
+pub async fn fetch_collection_revision(
+    api_key: &str,
+    r: &ParsedCollectionRef,
+) -> Result<(NexusCollectionInfo, Vec<NexusCollectionMod>), String> {
+    // ── Step 1: GraphQL — collection metadata + bundle download link ──
+    //
+    // We only query scalar fields we know exist. The nested modFiles/mod
+    // schema has changed multiple times; instead we fetch the downloadLink
+    // which points to a collection.json bundle containing the full mod list.
+
+    const GQL_URL: &str = "https://api.nexusmods.com/v2/graphql";
+
+    const QUERY: &str = "
+        query CollectionRevision(
+          $slug: String!, $revision: Int!, $domainName: String!, $viewAdultContent: Boolean
+        ) {
+          collectionRevision(
+            slug: $slug, revision: $revision, domainName: $domainName,
+            viewAdultContent: $viewAdultContent
+          ) {
+            collection {
+              name
+              summary
+              slug
+            }
+            downloadLink
+          }
+        }
+    ";
+
+    #[derive(Deserialize)]
+    struct GqlError { message: String }
+
+    #[derive(Deserialize, Default)]
+    struct GqlCollection {
+        name: Option<String>,
+        summary: Option<String>,
+        slug: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    struct GqlRevision {
+        collection: Option<GqlCollection>,
+        #[serde(rename = "downloadLink")]
+        download_link: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    struct GqlData {
+        #[serde(rename = "collectionRevision")]
+        collection_revision: Option<GqlRevision>,
+    }
+
+    #[derive(Deserialize)]
+    struct GqlResponse {
+        data: Option<GqlData>,
+        errors: Option<Vec<GqlError>>,
+    }
+
+    let gql_body = serde_json::json!({
+        "query": QUERY,
+        "variables": {
+            "slug": r.slug,
+            "revision": r.revision,
+            "domainName": r.game_domain,
+            "viewAdultContent": true,
+        }
+    });
+
+    let gql_raw = api_client(api_key)?
+        .post(GQL_URL)
+        .json(&gql_body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("NexusMods API error: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read collection response: {e}"))?;
+
+    eprintln!("[collection] GraphQL response: {gql_raw}");
+
+    let gql_resp: GqlResponse = serde_json::from_str(&gql_raw)
+        .map_err(|e| format!("Failed to parse collection response: {e}\nBody: {gql_raw}"))?;
+
+    if let Some(errs) = gql_resp.errors {
+        if !errs.is_empty() {
+            let msg = errs.into_iter().map(|e| e.message).collect::<Vec<_>>().join("; ");
+            return Err(format!("NexusMods collection error: {msg}"));
+        }
+    }
+
+    let revision = gql_resp
+        .data
+        .and_then(|d| d.collection_revision)
+        .ok_or_else(|| "Collection revision not found".to_string())?;
+
+    let col = revision.collection.unwrap_or_default();
+
+    let download_link = revision.download_link.ok_or_else(|| {
+        "No bundle download link returned — collection may require NexusMods Premium".to_string()
+    })?;
+
+    // The API returns a relative path — make it absolute and use the auth client
+    let download_url = if download_link.starts_with('/') {
+        format!("https://api.nexusmods.com{download_link}")
+    } else {
+        download_link
+    };
+
+    eprintln!("[collection] Bundle download URL: {download_url}");
+
+    // ── Step 2: The download_url endpoint returns CDN link(s) to a .7z archive
+
+    #[derive(Deserialize)]
+    struct CdnLink {
+        #[serde(rename = "URI")]
+        uri: String,
+    }
+    #[derive(Deserialize)]
+    struct DownloadLinksResp {
+        download_links: Vec<CdnLink>,
+    }
+
+    let links_raw = api_client(api_key)?
+        .get(&download_url)
+        .send()
+        .await
+        .map_err(|e| format!("Download link request failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("Download link error: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read download links: {e}"))?;
+
+    eprintln!("[collection] Download links response: {links_raw}");
+
+    let links_resp: DownloadLinksResp = serde_json::from_str(&links_raw)
+        .map_err(|e| format!("Failed to parse download links: {e}\nBody: {links_raw}"))?;
+
+    let cdn_url = links_resp
+        .download_links
+        .into_iter()
+        .next()
+        .map(|l| l.uri)
+        .ok_or_else(|| "No CDN download links returned for collection".to_string())?;
+
+    eprintln!("[collection] CDN URL: {cdn_url}");
+
+    // ── Step 3: Download the .7z archive ─────────────────────────────
+
+    let tmp_path = std::env::temp_dir()
+        .join(format!("lmm_collection_{}_{}.7z", r.slug, r.revision));
+
+    let archive_bytes = reqwest::get(&cdn_url)
+        .await
+        .map_err(|e| format!("Collection archive download failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("Collection archive download error: {e}"))?
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read collection archive bytes: {e}"))?;
+
+    fs::write(&tmp_path, &archive_bytes)
+        .map_err(|e| format!("Failed to write collection archive: {e}"))?;
+
+    eprintln!("[collection] Archive saved to {} ({} bytes)", tmp_path.display(), archive_bytes.len());
+
+    // ── Step 4: Extract collection.json from the .7z archive ─────────
+
+    #[derive(Deserialize)]
+    struct BundleModSource {
+        #[serde(rename = "modId")]
+        mod_id: Option<u64>,
+        #[serde(rename = "fileId")]
+        file_id: Option<u64>,
+    }
+
+    #[derive(Deserialize)]
+    struct BundleMod {
+        name: Option<String>,
+        version: Option<String>,
+        optional: Option<bool>,
+        #[serde(rename = "domainName")]
+        domain_name: Option<String>,
+        source: Option<BundleModSource>,
+    }
+
+    #[derive(Deserialize)]
+    struct CollectionBundle {
+        mods: Option<Vec<BundleMod>>,
+    }
+
+    let json_str = tokio::task::spawn_blocking({
+        let tmp_path = tmp_path.clone();
+        move || -> Result<String, String> {
+            let mut sz = sevenz_rust::SevenZReader::open(&tmp_path, sevenz_rust::Password::empty())
+                .map_err(|e| format!("Failed to open collection archive: {e}"))?;
+            let mut found: Option<String> = None;
+            sz.for_each_entries(&mut |entry: &sevenz_rust::SevenZArchiveEntry, reader: &mut dyn std::io::Read| {
+                eprintln!("[collection] Archive entry: {}", entry.name());
+                if entry.name().ends_with("collection.json") {
+                    let mut buf = String::new();
+                    reader.read_to_string(&mut buf)
+                        .map_err(sevenz_rust::Error::io)?;
+                    found = Some(buf);
+                    return Ok(false); // stop iteration
+                }
+                Ok(true)
+            })
+            .map_err(|e| format!("Failed to read collection archive entries: {e}"))?;
+            let _ = fs::remove_file(&tmp_path);
+            found.ok_or_else(|| "collection.json not found inside archive".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("Archive extraction task panicked: {e}"))??;
+
+    eprintln!("[collection] collection.json (first 300 chars): {}", &json_str[..json_str.len().min(300)]);
+
+    let bundle: CollectionBundle = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Failed to parse collection.json: {e}"))?;
+
+    // ── Step 5: Build the mod list ────────────────────────────────────
+
+    let collection_mods: Vec<NexusCollectionMod> = bundle
+        .mods
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|m| {
+            let source = m.source?;
+            Some(NexusCollectionMod {
+                mod_id: source.mod_id?,
+                file_id: source.file_id?,
+                name: m.name.unwrap_or_default(),
+                version: m.version.unwrap_or_default(),
+                game_domain: m.domain_name.unwrap_or_else(|| r.game_domain.clone()),
+                optional: m.optional.unwrap_or(false),
+            })
+        })
+        .collect();
+
+    Ok((
+        NexusCollectionInfo {
+            name: col.name.unwrap_or_else(|| r.slug.clone()),
+            summary: col.summary.unwrap_or_default(),
+            slug: col.slug.unwrap_or_else(|| r.slug.clone()),
+            revision: r.revision,
+            mod_count: collection_mods.len(),
+            game_domain: r.game_domain.clone(),
+        },
+        collection_mods,
+    ))
+}
+
 // ── Public entry points (called from main.rs commands) ────────────────
+
+pub async fn lookup_collection(
+    api_key: &str,
+    input: &str,
+) -> Result<(NexusCollectionInfo, Vec<NexusCollectionMod>), String> {
+    let r = parse_collection_ref(input)?;
+    fetch_collection_revision(api_key, &r).await
+}
 
 pub async fn lookup(
     api_key: &str,
@@ -481,6 +815,61 @@ pub async fn lookup(
     let info = fetch_mod_info(api_key, &r).await?;
     let files = fetch_mod_files(api_key, &r).await?;
     Ok((info, files))
+}
+
+// Detect ZIP vs 7z by magic bytes and dispatch to the right extractor.
+pub fn install_archive(path: &Path, game_root: &str) -> Result<Vec<String>, String> {
+    let mut magic = [0u8; 6];
+    let n = fs::File::open(path)
+        .and_then(|mut f| f.read(&mut magic))
+        .unwrap_or(0);
+    // 7z magic: 37 7A BC AF 27 1C
+    if n >= 6 && magic == [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C] {
+        install_7z(path, game_root)
+    } else {
+        install_zip(path, game_root)
+    }
+}
+
+fn install_7z(path: &Path, game_root: &str) -> Result<Vec<String>, String> {
+
+    // Buffer all file contents in a single pass — sevenz_rust requires consuming
+    // the reader in the callback to advance the iterator, so two-pass would
+    // decompress the whole archive twice.
+    let mut buffered: Vec<(String, Vec<u8>)> = Vec::new();
+
+    let mut sz = sevenz_rust::SevenZReader::open(path, sevenz_rust::Password::empty())
+        .map_err(|e| format!("Cannot open 7z archive: {e}"))?;
+
+    sz.for_each_entries(&mut |entry: &sevenz_rust::SevenZArchiveEntry, reader: &mut dyn std::io::Read| {
+        if entry.is_directory() {
+            return Ok(true);
+        }
+        let name = entry.name().replace('\\', "/");
+        let mut data = Vec::new();
+        reader.read_to_end(&mut data).map_err(sevenz_rust::Error::io)?;
+        buffered.push((name, data));
+        Ok(true)
+    }).map_err(|e| format!("7z extraction failed: {e}"))?;
+
+    let names: Vec<String> = buffered.iter().map(|(n, _)| n.clone()).collect();
+    let strategy = detect_install_strategy(&names)?;
+    let mut installed = Vec::new();
+
+    for (raw, data) in buffered {
+        let dest_rel = match &strategy {
+            InstallStrategy::GameRelative => raw.clone(),
+            InstallStrategy::DropIntoArchiveMod => format!("archive/pc/mod/{raw}"),
+        };
+        let dest_path = PathBuf::from(game_root).join(&dest_rel);
+        if let Some(p) = dest_path.parent() {
+            fs::create_dir_all(p).map_err(|e| format!("Cannot create dir: {e}"))?;
+        }
+        fs::write(&dest_path, &data).map_err(|e| format!("Cannot write '{dest_rel}': {e}"))?;
+        installed.push(dest_rel);
+    }
+
+    Ok(installed)
 }
 
 pub async fn install(
@@ -493,12 +882,41 @@ pub async fn install(
     let r = parse_mod_ref(input)?;
     let download_url = get_download_url(api_key, &r, file_id).await?;
 
-    // Download to a temp file
-    let tmp_path = std::env::temp_dir().join(format!("lmm_mod_{file_id}.zip"));
+    let tmp_path = std::env::temp_dir().join(format!("lmm_mod_{file_id}.tmp"));
     download_file(&download_url, &tmp_path, app_handle).await?;
 
-    // Install and clean up temp file
-    let result = install_zip(&tmp_path, install_dir);
+    let result = install_archive(&tmp_path, install_dir);
     let _ = fs::remove_file(&tmp_path);
     result
+}
+
+// Skips get_download_url — caller already has a CDN URL (e.g. from in-app WebView auth)
+pub async fn install_from_url(
+    url: &str,
+    file_id: u64,
+    install_dir: &str,
+    app_handle: &AppHandle,
+) -> Result<Vec<String>, String> {
+    let tmp_path = std::env::temp_dir().join(format!("lmm_mod_{file_id}.tmp"));
+    download_file(url, &tmp_path, app_handle).await?;
+    let result = install_archive(&tmp_path, install_dir);
+    let _ = fs::remove_file(&tmp_path);
+    result
+}
+
+pub async fn fetch_game_id(api_key: &str, domain: &str) -> Result<u64, String> {
+    #[derive(Deserialize)]
+    struct GameInfo { id: u64 }
+    let url = format!("{}/games/{}.json", API_BASE, domain);
+    let resp: GameInfo = api_client(api_key)?
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Game info request failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("Game info error: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse game info: {e}"))?;
+    Ok(resp.id)
 }

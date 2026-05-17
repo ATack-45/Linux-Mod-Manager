@@ -365,9 +365,14 @@ async function init() {
   if (!settings.excluded_paths) settings.excluded_paths = [];
   if (!settings.pinned_games) settings.pinned_games = [];
   if (settings.nexus_api_key === undefined) settings.nexus_api_key = "";
+  if (settings.nexus_username === undefined) settings.nexus_username = "";
 
   const nexusInput = document.getElementById("nexus-api-input");
   if (nexusInput) nexusInput.value = settings.nexus_api_key;
+
+  if (settings.nexus_username) {
+    setNexusAccountUI(settings.nexus_username);
+  }
 
   pendingExcluded = new Set(settings.excluded_paths);
   pendingExtra = [...settings.extra_paths];
@@ -427,6 +432,58 @@ document.getElementById("btn-nexus-api-show").addEventListener("click", (e) => {
   const show = input.type === "password";
   input.type = show ? "text" : "password";
   e.target.textContent = show ? "Hide" : "Show";
+});
+
+function setNexusAccountUI(username) {
+  const avatar = document.getElementById("nexus-account-avatar");
+  const name = document.getElementById("nexus-account-name");
+  const sub = document.getElementById("nexus-account-sub");
+  const btn = document.getElementById("btn-nexus-login");
+  if (username) {
+    avatar.textContent = username.charAt(0);
+    avatar.classList.add("logged-in");
+    name.textContent = username;
+    name.classList.add("logged-in");
+    sub.textContent = "Logged in — collection downloads enabled";
+    btn.textContent = "Re-login";
+  } else {
+    avatar.textContent = "?";
+    avatar.classList.remove("logged-in");
+    name.textContent = "Not logged in";
+    name.classList.remove("logged-in");
+    sub.textContent = "Login to enable collection downloads for free accounts";
+    btn.textContent = "Login";
+  }
+  btn.disabled = false;
+}
+
+document.getElementById("btn-nexus-login").addEventListener("click", async (e) => {
+  e.target.disabled = true;
+  e.target.textContent = "Opening...";
+  document.getElementById("nexus-account-sub").textContent = "Waiting for login...";
+  try {
+    await invoke("open_nexusmods_login");
+  } catch (err) {
+    document.getElementById("nexus-account-sub").textContent = String(err);
+    e.target.disabled = false;
+    e.target.textContent = "Login";
+  }
+});
+
+listen("nexusmods-login-complete", async ({ payload }) => {
+  const username = payload && payload.username;
+  const apiKey = payload && payload.api_key;
+  setNexusAccountUI(username || null);
+  if (username) {
+    settings.nexus_username = username;
+    await invoke("save_nexus_username", { username }).catch(() => {});
+  }
+  if (apiKey) {
+    const input = document.getElementById("nexus-api-input");
+    input.value = apiKey;
+    settings.nexus_api_key = apiKey;
+    markDirty();
+  }
 });
 
 // ── NXM deep-link handler ──────────────────────────────────────────

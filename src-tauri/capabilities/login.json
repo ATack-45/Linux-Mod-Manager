@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "login",
+  "description": "Capabilities for NexusMods login and auth windows",
+  "windows": ["nexusmods-auth", "nexusmods-login"],
+  "remote": {
+    "urls": ["https://nexusmods.com/*", "https://*.nexusmods.com/*"]
+  },
+  "permissions": [
+    "core:default"
+  ]
+}
